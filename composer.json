@@ -1,0 +1,75 @@
+{
+    "name": "tipowerup/ti-ext-paystack",
+    "type": "tastyigniter-package",
+    "description": "Accept payments via Paystack for TastyIgniter.",
+    "license": "MIT",
+    "keywords": [
+        "tastyigniter",
+        "paystack",
+        "payment"
+    ],
+    "authors": [
+        {
+            "name": "Obinna Elvis Okechukwu"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "tastyigniter/core": "^v4.0",
+        "tastyigniter/ti-ext-payregister": "*"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.2",
+        "pestphp/pest-plugin-laravel": "^3.0",
+        "rector/rector": "^2.0",
+        "tipowerup/testbench": "^0.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Tipowerup\\Paystack\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tipowerup\\Paystack\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "tastyigniter-extension": {
+            "code": "tipowerup.paystack",
+            "name": "Paystack Payment",
+            "icon": {
+                "image": "icon.svg",
+                "backgroundColor": "#e9f6ff"
+            },
+            "homepage": "https://tipowerup.com"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true,
+            "composer/installers": true
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "test:lint": "vendor/bin/pint --test --ansi",
+        "test:lint-fix": "vendor/bin/pint --ansi",
+        "test:refactor": "vendor/bin/rector process --dry-run --ansi",
+        "test:refactor-fix": "vendor/bin/rector process --ansi",
+        "test:static": "vendor/bin/phpstan analyse --memory-limit=1056M --ansi",
+        "test:static-fix": "vendor/bin/phpstan --generate-baseline --memory-limit=1056M --ansi",
+        "test:pest": "vendor/bin/pest",
+        "test:coverage": "vendor/bin/pest --coverage --compact",
+        "test": [
+            "@test:lint",
+            "@test:refactor",
+            "@test:static",
+            "@test:pest"
+        ]
+    }
+}
