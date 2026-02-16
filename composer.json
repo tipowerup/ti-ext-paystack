@@ -10,13 +10,13 @@
     ],
     "authors": [
         {
-            "name": "Obinna Elvis Okechukwu"
+            "name": "TI PowerUp Team",
+            "email": "support@tipowerup.com"
         }
     ],
     "require": {
-        "php": "^8.2",
-        "tastyigniter/core": "^v4.0",
-        "tastyigniter/ti-ext-payregister": "*"
+        "php": "^8.2 || ^8.3",
+        "tastyigniter/core": "^v4.0"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
