@@ -4,6 +4,7 @@
 )
 <div id="paystackForm" class="payment-form w-100"
      data-order-created="{{ (bool)$order->order_id }}"
+     data-order-hash="{{ $order->hash }}"
      data-integration-type="{{ $paymentMethod->getIntegrationType() }}"
 >
     @if ($paymentProfile)

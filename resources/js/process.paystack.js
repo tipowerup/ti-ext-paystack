@@ -12,7 +12,8 @@
     }
 
     ProcessPaystack.prototype.init = function () {
-        this.$checkoutForm.on('submitCheckoutForm', $.proxy(this.processPayment, this))
+        this.$checkoutForm.off('submitCheckoutForm.paystack')
+        this.$checkoutForm.on('submitCheckoutForm.paystack', $.proxy(this.processPayment, this))
     }
 
     ProcessPaystack.prototype.processPayment = function (e) {
@@ -45,7 +46,7 @@
             headers: {
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
             },
-            url: '/ti_payregister/paystack_initialize_transaction/handle',
+            url: '/ti_payregister/paystack_initialize_transaction/' + self.options.orderHash,
             data: {
                 'create_payment_profile': createPaymentProfile,
             },
@@ -65,8 +66,11 @@
                     }
                 })
             },
-            error: function (xhr, status, error) {
-                console.error('error', error)
+            error: function (xhr) {
+                var message = xhr.responseJSON && xhr.responseJSON.message
+                    ? xhr.responseJSON.message
+                    : 'An error occurred while processing your payment.'
+                $.ti.flashMessage({class: 'danger', text: message})
                 self.$checkoutBtn.prop('disabled', false)
             }
         })
@@ -79,11 +83,11 @@
             headers: {
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
             },
-            url: '/ti_payregister/paystack_payment_successful/handle',
+            url: '/ti_payregister/paystack_payment_successful/' + self.options.orderHash,
             method: 'POST',
             data: transaction,
             success: function () {
-                self.$checkoutForm.unbind('submitCheckoutForm').submit()
+                self.$checkoutForm.off('submitCheckoutForm.paystack').submit()
             },
             error: function () {
                 self.$checkoutBtn.prop('disabled', false)
@@ -100,9 +104,17 @@
 
     $.fn.processPaystack = function (option) {
         var $this = $(this).first()
+        var data = $this.data('ti.processPaystack')
         var options = $.extend(true, {}, ProcessPaystack.DEFAULTS, $this.data(), typeof option == 'object' && option)
 
-        return new ProcessPaystack($this, options)
+        if (!data) {
+            $this.data('ti.processPaystack', (data = new ProcessPaystack($this, options)))
+        } else {
+            data.options = options
+            data.init()
+        }
+
+        return data
     }
 
     $.fn.processPaystack.Constructor = ProcessPaystack

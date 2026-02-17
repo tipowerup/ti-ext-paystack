@@ -15,6 +15,7 @@ use Igniter\PayRegister\Models\Payment;
 use Igniter\PayRegister\Models\PaymentProfile;
 use Igniter\System\Traits\SessionMaker;
 use Igniter\User\Models\Customer;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Override;
 use Tipowerup\Paystack\Classes\PaystackApi;
@@ -74,6 +75,17 @@ class Paystack extends BasePaymentGateway
         return $this->model->integration_type ?? 'popup';
     }
 
+    public function isConfigured(): bool
+    {
+        return ! empty($this->getSecretKey());
+    }
+
+    #[Override]
+    public function completesPaymentOnClient(): bool
+    {
+        return $this->getIntegrationType() === 'popup';
+    }
+
     //
     // Payment Processing
     //
@@ -95,8 +107,8 @@ class Paystack extends BasePaymentGateway
         }
 
         try {
-            $response = $this->initializeTransaction($order);
-            if (!array_has($response, 'authorization_url')) {
+            $response = $this->initializeTransaction([$order->hash]);
+            if (! array_has($response, 'authorization_url')) {
                 throw new ApplicationException(lang('tipowerup.paystack::default.alert_transaction_failed'));
             }
 
@@ -113,10 +125,13 @@ class Paystack extends BasePaymentGateway
         }
     }
 
-    public function initializeTransaction(?Order $order = null): array
+    public function initializeTransaction(array $params = []): JsonResponse|array
     {
-        if (!$order) {
-            return [];
+        $hash = $params[0] ?? null;
+        $order = $hash ? $this->createOrderModel()->whereHash($hash)->first() : null;
+
+        if (! $order) {
+            return response()->json(['message' => lang('tipowerup.paystack::default.alert_transaction_failed')], 404);
         }
 
         $this->forgetSession($this->sessionKey.'.create_payment_profile');
@@ -144,7 +159,9 @@ class Paystack extends BasePaymentGateway
 
             return $response['data'] ?? [];
         } catch (Exception $ex) {
-            throw new ApplicationException($ex->getMessage());
+            $order->logPaymentAttempt($ex->getMessage(), 0, [], []);
+
+            return response()->json(['message' => $ex->getMessage()], 422);
         }
     }
 
@@ -161,7 +178,7 @@ class Paystack extends BasePaymentGateway
     #[Override]
     public function updatePaymentProfile(Customer $customer, array $data = []): PaymentProfile
     {
-        if (!$profile = $this->model->findPaymentProfile($customer)) {
+        if (! $profile = $this->model->findPaymentProfile($customer)) {
             $profile = $this->model->initPaymentProfile($customer);
         }
 
@@ -184,7 +201,7 @@ class Paystack extends BasePaymentGateway
     public function payFromPaymentProfile(Order $order, array $data = []): void
     {
         $profile = $this->model->findPaymentProfile($order->customer);
-        if (!$profile || !array_has($profile->profile_data, 'authorization_code')) {
+        if (! $profile || ! array_has($profile->profile_data, 'authorization_code')) {
             throw new ApplicationException(
                 lang('tipowerup.paystack::default.alert_payment_profile_not_found')
             );
@@ -242,7 +259,7 @@ class Paystack extends BasePaymentGateway
     {
         $profile = $this->model->findPaymentProfile($customer);
 
-        return $profile && !empty(array_get((array) $profile->profile_data, 'authorization_code'));
+        return $profile && ! empty(array_get((array) $profile->profile_data, 'authorization_code'));
     }
 
     //
@@ -253,7 +270,7 @@ class Paystack extends BasePaymentGateway
     public function processRefundForm($data, $order, $paymentLog): void
     {
         $paymentResponse = $paymentLog->response;
-        if (!is_null($paymentLog->refunded_at) || !is_array($paymentResponse)) {
+        if (! is_null($paymentLog->refunded_at) || ! is_array($paymentResponse)) {
             throw new ApplicationException(lang('tipowerup.paystack::default.alert_refund_nothing_to_refund'));
         }
 
@@ -303,7 +320,7 @@ class Paystack extends BasePaymentGateway
         }
 
         $signature = request()->header('x-paystack-signature');
-        if (!$signature) {
+        if (! $signature) {
             return response()->json('Missing signature', 400);
         }
 
@@ -321,12 +338,12 @@ class Paystack extends BasePaymentGateway
         }
 
         $orderHash = $this->extractOrderHash($payload);
-        if (!$orderHash) {
+        if (! $orderHash) {
             return response()->json('Order hash not found', 400);
         }
 
         $order = $this->createOrderModel()->whereHash($orderHash)->first();
-        if (!$order) {
+        if (! $order) {
             return response()->json('Order not found', 404);
         }
 
@@ -369,13 +386,13 @@ class Paystack extends BasePaymentGateway
         $order = $hash ? $this->createOrderModel()->whereHash($hash)->first() : null;
 
         try {
-            if (!$order) {
+            if (! $order) {
                 throw new Exception(lang('tipowerup.paystack::default.alert_transaction_failed'));
             }
 
-            if (!$order->isPaymentProcessed()) {
+            if (! $order->isPaymentProcessed()) {
                 $reference = request()->input('reference') ?? request()->input('trxref');
-                if (!$reference) {
+                if (! $reference) {
                     throw new Exception(lang('tipowerup.paystack::default.alert_transaction_failed'));
                 }
 
@@ -421,16 +438,21 @@ class Paystack extends BasePaymentGateway
             }
 
             if ($this->getIntegrationType() === 'redirect') {
-                return redirect()->to(url('checkout/checkout'));
+                return redirect()->to(page_url('checkout.checkout'));
             }
 
-            return null;
+            return response()->json(['success' => true]);
         } catch (Exception $ex) {
             $order?->logPaymentAttempt($ex->getMessage(), 0, request()->only(['reference', 'trxref']), $response ?? []);
-            flash()->warning(lang('tipowerup.paystack::default.alert_transaction_failed'))
-                ->important()->now();
 
-            return redirect()->to(url('checkout/checkout'));
+            if ($this->getIntegrationType() === 'redirect') {
+                flash()->warning(lang('tipowerup.paystack::default.alert_transaction_failed'))
+                    ->important()->now();
+
+                return redirect()->to(page_url('checkout.checkout'));
+            }
+
+            return response()->json(['message' => $ex->getMessage()], 422);
         }
     }
 
@@ -442,12 +464,12 @@ class Paystack extends BasePaymentGateway
         $hash = $params[0] ?? null;
         $order = $hash ? $this->createOrderModel()->whereHash($hash)->first() : null;
 
-        if (!$order || !$order->isPaymentProcessed()) {
+        if (! $order || ! $order->isPaymentProcessed()) {
             flash()->warning(lang('tipowerup.paystack::default.alert_transaction_failed'))
                 ->important()->now();
         }
 
-        return redirect()->to(url('checkout/checkout'));
+        return redirect()->to(page_url('checkout.checkout'));
     }
 
     //
