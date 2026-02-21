@@ -7,6 +7,7 @@
         this.$checkoutFormContainer = this.$el.closest('[data-control="checkout"]')
         this.$checkoutForm = this.$checkoutFormContainer.find('form')
         this.$checkoutBtn = $('[data-checkout-control="submit"]')
+        this.processing = false
 
         this.init()
     }
@@ -22,6 +23,9 @@
 
         if (this.options.integrationType === 'redirect') return
 
+        if (this.processing) return
+        this.processing = true
+
         e.preventDefault()
         var self = this
 
@@ -29,6 +33,9 @@
             self.$checkoutForm.request(self.$checkoutForm.data('handler'))
                 .done(function () {
                     self.handlePayment()
+                })
+                .fail(function () {
+                    self.processing = false
                 })
         } else {
             self.handlePayment()
@@ -46,7 +53,7 @@
             headers: {
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
             },
-            url: '/ti_payregister/paystack_initialize_transaction/' + self.options.orderHash,
+            url: self.options.initializeUrl + '/' + self.options.orderHash,
             data: {
                 'create_payment_profile': createPaymentProfile,
             },
@@ -55,6 +62,7 @@
                 var popup = new PaystackPop()
                 popup.resumeTransaction(authData.access_code, {
                     onCancel: function () {
+                        self.processing = false
                         self.$checkoutBtn.prop('disabled', false)
                     },
                     onSuccess: function (transaction) {
@@ -62,6 +70,7 @@
                     },
                     onError: function (error) {
                         console.error('An error occurred: ', error)
+                        self.processing = false
                         self.$checkoutBtn.prop('disabled', false)
                     }
                 })
@@ -71,6 +80,7 @@
                     ? xhr.responseJSON.message
                     : 'An error occurred while processing your payment.'
                 $.ti.flashMessage({class: 'danger', text: message})
+                self.processing = false
                 self.$checkoutBtn.prop('disabled', false)
             }
         })
@@ -83,13 +93,18 @@
             headers: {
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content'),
             },
-            url: '/ti_payregister/paystack_payment_successful/' + self.options.orderHash,
+            url: self.options.successUrl + '/' + self.options.orderHash,
             method: 'POST',
             data: transaction,
             success: function () {
                 self.$checkoutForm.off('submitCheckoutForm.paystack').submit()
             },
-            error: function () {
+            error: function (xhr) {
+                var message = xhr.responseJSON && xhr.responseJSON.message
+                    ? xhr.responseJSON.message
+                    : 'Payment verification failed. Please contact support.'
+                $.ti.flashMessage({class: 'danger', text: message})
+                self.processing = false
                 self.$checkoutBtn.prop('disabled', false)
             }
         })
@@ -125,6 +140,8 @@
     }
 
     $(document).render(function () {
-        $('#paystackForm').processPaystack()
+        if ($('#paystackForm').length) {
+            $('#paystackForm').processPaystack()
+        }
     })
 }(window.jQuery)

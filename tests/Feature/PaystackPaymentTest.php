@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Igniter\Cart\Models\Order;
 use Igniter\PayRegister\Models\Payment;
+use Illuminate\Support\Facades\Http;
 use Tipowerup\Paystack\Payments\Paystack;
 
 function setProtectedProperty(object $object, string $property, mixed $value): void
@@ -48,15 +49,29 @@ it('returns true for popup integration type in processPaymentForm', function ():
 });
 
 it('returns redirect for redirect integration type in processPaymentForm', function (): void {
+    Http::fake([
+        'https://api.paystack.co/transaction/initialize' => Http::response([
+            'status' => true,
+            'data' => [
+                'authorization_url' => 'https://checkout.paystack.com/test123',
+                'access_code' => 'test123',
+                'reference' => 'ref123',
+            ],
+        ]),
+    ]);
+
     $order = Mockery::mock(Order::class)->makePartial();
-    $order->shouldReceive('getAttribute')->with('order_total')->andReturn(100);
     $order->shouldReceive('getAttribute')->with('payment_method')->andReturn($this->paymentModel);
     $order->shouldReceive('logPaymentAttempt')->never();
 
     $this->gateway->shouldReceive('validateApplicableFee')->once();
     $this->gateway->shouldReceive('getIntegrationType')->andReturn('redirect');
-    $this->gateway->shouldReceive('initializeTransaction')
-        ->andReturn(['authorization_url' => 'https://paystack.com/pay/test']);
+    $this->gateway->shouldReceive('buildTransactionData')->with($order)->andReturn([
+        'email' => 'test@example.com',
+        'amount' => 10000,
+        'currency' => 'NGN',
+        'metadata' => '{}',
+    ]);
 
     $result = $this->gateway->processPaymentForm([], $this->paymentModel, $order);
 

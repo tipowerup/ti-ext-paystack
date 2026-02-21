@@ -6,6 +6,8 @@
      data-order-created="{{ (bool)$order->order_id }}"
      data-order-hash="{{ $order->hash }}"
      data-integration-type="{{ $paymentMethod->getIntegrationType() }}"
+     data-initialize-url="{{ $paymentMethod->makeEntryPointUrl('paystack_initialize_transaction') }}"
+     data-success-url="{{ $paymentMethod->makeEntryPointUrl('paystack_payment_successful') }}"
 >
     @if ($paymentProfile)
         <div class="form-group">
